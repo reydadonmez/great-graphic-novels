@@ -18,42 +18,76 @@ const StarRating = ({ value, onChange, readonly = false }) => {
   );
 };
 
+const CoverPlaceholder = ({ size = 40 }) => (
+  <div style={{
+    width: size, height: size * 1.4, background: "#f5f5f5", border: "1px solid #ebebeb",
+    borderRadius: "2px", display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, color: "#ccc", fontSize: size * 0.35,
+  }}>📖</div>
+);
+
+const CoverImage = ({ src, size = 40 }) =>
+  src
+    ? <img src={src} alt="cover" style={{ width: size, height: size * 1.4, objectFit: "cover", borderRadius: "2px", border: "1px solid #ebebeb", flexShrink: 0, display: "block" }} />
+    : <CoverPlaceholder size={size} />;
+
 export default function App() {
   const [novels, setNovels] = useState([]);
   const [ready, setReady] = useState(false);
   const [sortMode, setSortMode] = useState("alpha");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: "", writer: "", rating: 0 });
+  const [form, setForm] = useState({ title: "", writer: "", rating: 0, cover: null });
   const [error, setError] = useState("");
   const [added, setAdded] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState("");
   const [copyMsg, setCopyMsg] = useState(false);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const fileInputRef = useRef(null);
   const initialized = useRef(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setNovels(parsed);
-      }
-    } catch (e) {}
-    setReady(true);
-    initialized.current = true;
+    const load = async () => {
+      try {
+        const result = await window.storage.get(STORAGE_KEY);
+        if (result && result.value) {
+          const parsed = JSON.parse(result.value);
+          if (Array.isArray(parsed)) setNovels(parsed);
+        }
+      } catch (e) {}
+      setReady(true);
+      initialized.current = true;
+    };
+    load();
   }, []);
 
   useEffect(() => {
     if (!initialized.current) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(novels));
-    } catch (e) {}
+    window.storage.set(STORAGE_KEY, JSON.stringify(novels)).catch(() => {});
   }, [novels]);
 
   const sorted = useMemo(() => [...novels].sort((a, b) =>
     sortMode === "alpha" ? a.title.localeCompare(b.title) : b.rating - a.rating
   ), [novels, sortMode]);
+
+  const handleCoverChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      setCoverPreview(dataUrl);
+      setForm(f => ({ ...f, cover: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const resetForm = () => {
+    setForm({ title: "", writer: "", rating: 0, cover: null });
+    setCoverPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleAdd = () => {
     if (!form.title.trim()) return setError("Title is required.");
@@ -62,7 +96,7 @@ export default function App() {
     const entry = { ...form, id: Date.now() };
     setNovels(prev => [...prev, entry]);
     setAdded(form.title);
-    setForm({ title: "", writer: "", rating: 0 });
+    resetForm();
     setError("");
     setTimeout(() => { setShowForm(false); setAdded(null); }, 1200);
   };
@@ -104,10 +138,12 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#fff", color: "#111", fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+
+      {/* Header */}
       <div style={{ padding: "48px 56px 32px", borderBottom: "1px solid #efefef", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: "11px", letterSpacing: "0.18em", color: "#aaa", textTransform: "uppercase", marginBottom: "6px" }}>Personal Archive</div>
-          <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", letterSpacing: "-0.02em", color: "#111" }}>Graphic Novel Collection</h1>
+          <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "300", letterSpacing: "-0.02em", color: "#111" }}>My Graphic Novels</h1>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           {novels.length > 0 && (
@@ -126,7 +162,7 @@ export default function App() {
           >
             Import
           </button>
-          <button onClick={() => { setShowForm(true); setError(""); }}
+          <button onClick={() => { setShowForm(true); setError(""); resetForm(); }}
             style={{ background: "#111", color: "#fff", border: "none", padding: "11px 22px", fontSize: "13px", letterSpacing: "0.04em", fontFamily: "inherit", cursor: "pointer", borderRadius: "4px" }}
             onMouseEnter={e => e.target.style.background = "#333"}
             onMouseLeave={e => e.target.style.background = "#111"}
@@ -135,11 +171,15 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* Export hint banner */}
       {novels.length > 0 && (
         <div style={{ padding: "10px 56px", background: "#fafafa", borderBottom: "1px solid #efefef", fontSize: "12px", color: "#bbb" }}>
-          Use Export to save your collection as text, and Import to restore it next time.
+          💡 Use <strong style={{ color: "#999" }}>Export</strong> to save your collection as text, and <strong style={{ color: "#999" }}>Import</strong> to restore it next time.
         </div>
       )}
+
+      {/* Sort Controls */}
       <div style={{ padding: "16px 56px", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #efefef" }}>
         <span style={{ fontSize: "11px", color: "#bbb", letterSpacing: "0.12em", textTransform: "uppercase", marginRight: "4px" }}>Sort</span>
         {["alpha", "rating"].map((mode) => (
@@ -153,6 +193,8 @@ export default function App() {
           {novels.length} {novels.length === 1 ? "volume" : "volumes"}
         </span>
       </div>
+
+      {/* List */}
       <div style={{ padding: "8px 56px 56px" }}>
         {sorted.length === 0 ? (
           <div style={{ textAlign: "center", padding: "80px 0", color: "#ccc" }}>
@@ -161,16 +203,17 @@ export default function App() {
           </div>
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 180px 100px 32px", gap: "0 16px", padding: "16px 8px 8px", borderBottom: "1px solid #efefef", fontSize: "10px", letterSpacing: "0.14em", color: "#bbb", textTransform: "uppercase" }}>
-              <div>#</div><div>Title</div><div>Writer</div><div>Rating</div><div></div>
+            <div style={{ display: "grid", gridTemplateColumns: "32px 48px 1fr 180px 100px 32px", gap: "0 16px", padding: "16px 8px 8px", borderBottom: "1px solid #efefef", fontSize: "10px", letterSpacing: "0.14em", color: "#bbb", textTransform: "uppercase" }}>
+              <div>#</div><div>Cover</div><div>Title</div><div>Writer</div><div>Rating</div><div></div>
             </div>
             {sorted.map((novel, i) => (
               <div key={novel.id}
-                style={{ display: "grid", gridTemplateColumns: "32px 1fr 180px 100px 32px", gap: "0 16px", padding: "14px 8px", borderBottom: "1px solid #f5f5f5", alignItems: "center", transition: "background 0.1s", borderRadius: "4px", margin: "0 -8px" }}
+                style={{ display: "grid", gridTemplateColumns: "32px 48px 1fr 180px 100px 32px", gap: "0 16px", padding: "10px 8px", borderBottom: "1px solid #f5f5f5", alignItems: "center", transition: "background 0.1s", borderRadius: "4px", margin: "0 -8px" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#fafafa"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}
               >
                 <div style={{ fontSize: "11px", color: "#ddd" }}>{String(i + 1).padStart(2, "0")}</div>
+                <CoverImage src={novel.cover} size={36} />
                 <div style={{ fontSize: "15px", color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.title}</div>
                 <div style={{ fontSize: "13px", color: "#888", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.writer}</div>
                 <StarRating value={novel.rating} readonly />
@@ -184,8 +227,10 @@ export default function App() {
           </>
         )}
       </div>
+
+      {/* Add Modal */}
       {showForm && (
-        <div onClick={(e) => { if (e.target === e.currentTarget) { setShowForm(false); setError(""); } }}
+        <div onClick={(e) => { if (e.target === e.currentTarget) { setShowForm(false); setError(""); resetForm(); } }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "20px" }}
         >
           <div style={{ background: "#fff", border: "1px solid #e5e5e5", borderRadius: "8px", padding: "36px", width: "100%", maxWidth: "400px", boxShadow: "0 4px 32px rgba(0,0,0,0.08)" }}>
@@ -197,6 +242,42 @@ export default function App() {
             ) : (
               <>
                 <div style={{ fontSize: "16px", fontWeight: "400", marginBottom: "28px", color: "#111" }}>Add a Novel</div>
+
+                {/* Cover upload */}
+                <div style={{ marginBottom: "20px" }}>
+                  <label style={{ display: "block", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>Cover Image <span style={{ color: "#ccc", fontStyle: "normal", textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                    {coverPreview
+                      ? <img src={coverPreview} alt="preview" style={{ width: 52, height: 72, objectFit: "cover", borderRadius: "3px", border: "1px solid #e5e5e5", flexShrink: 0 }} />
+                      : <div style={{ width: 52, height: 72, background: "#f8f8f8", border: "1px dashed #ddd", borderRadius: "3px", display: "flex", alignItems: "center", justifyContent: "center", color: "#ccc", fontSize: "20px", flexShrink: 0 }}>📖</div>
+                    }
+                    <div style={{ flex: 1 }}>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleCoverChange}
+                        style={{ display: "none" }}
+                        id="cover-upload"
+                      />
+                      <label htmlFor="cover-upload"
+                        style={{ display: "inline-block", background: "#fff", color: "#555", border: "1px solid #e5e5e5", padding: "8px 14px", fontSize: "12px", fontFamily: "inherit", cursor: "pointer", borderRadius: "4px", letterSpacing: "0.03em" }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = "#ccc"}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e5e5"}
+                      >
+                        {coverPreview ? "Change image" : "Choose image"}
+                      </label>
+                      {coverPreview && (
+                        <button onClick={() => { setCoverPreview(null); setForm(f => ({ ...f, cover: null })); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                          style={{ display: "block", marginTop: "6px", background: "none", border: "none", color: "#bbb", fontSize: "11px", cursor: "pointer", padding: 0, fontFamily: "inherit" }}
+                          onMouseEnter={e => e.target.style.color = "#e55"}
+                          onMouseLeave={e => e.target.style.color = "#bbb"}
+                        >Remove</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div style={{ marginBottom: "16px" }}>
                   <label style={{ display: "block", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Title</label>
                   <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Watchmen" style={inputStyle}
@@ -218,7 +299,7 @@ export default function App() {
                     onMouseEnter={e => e.target.style.background = "#333"} onMouseLeave={e => e.target.style.background = "#111"}>
                     Add to Shelf
                   </button>
-                  <button onClick={() => { setShowForm(false); setError(""); }}
+                  <button onClick={() => { setShowForm(false); setError(""); resetForm(); }}
                     style={{ background: "#fff", color: "#999", border: "1px solid #e5e5e5", padding: "11px 18px", fontSize: "13px", fontFamily: "inherit", cursor: "pointer", borderRadius: "4px" }}
                     onMouseEnter={e => e.target.style.borderColor = "#ccc"} onMouseLeave={e => e.target.style.borderColor = "#e5e5e5"}>
                     Cancel
@@ -229,6 +310,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Import Modal */}
       {showImport && (
         <div onClick={(e) => { if (e.target === e.currentTarget) { setShowImport(false); setImportText(""); setImportError(""); } }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "20px" }}

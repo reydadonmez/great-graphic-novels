@@ -99,7 +99,9 @@ export default function App() {
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [editError, setEditError] = useState("");
   const [coverPreview, setCoverPreview] = useState(null);
+  const [editCoverPreview, setEditCoverPreview] = useState(null);
   const fileInputRef = useRef(null);
+  const editFileInputRef = useRef(null);
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -143,6 +145,18 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleEditCoverChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      setEditCoverPreview(dataUrl);
+      setEditForm(f => ({ ...f, cover: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleAdd = () => {
     if (!form.title.trim()) return setError("Title is required.");
     if (!form.writer.trim()) return setError("Writer is required.");
@@ -157,8 +171,10 @@ export default function App() {
 
   const openEdit = (novel) => {
     setEditingId(novel.id);
-    setEditForm({ title: novel.title, writer: novel.writer, rating: novel.rating, dateRead: novel.dateRead || "" });
+    setEditForm({ title: novel.title, writer: novel.writer, rating: novel.rating, dateRead: novel.dateRead || "", cover: novel.cover || null });
+    setEditCoverPreview(novel.cover || null);
     setEditError("");
+    if (editFileInputRef.current) editFileInputRef.current.value = "";
   };
 
   const handleSaveEdit = () => {
@@ -362,6 +378,29 @@ export default function App() {
         >
           <div style={{ background: "#fff", border: "1px solid #e5e5e5", borderRadius: "8px", padding: "36px", width: "100%", maxWidth: "400px", boxShadow: "0 4px 32px rgba(0,0,0,0.08)" }}>
             <div style={{ fontSize: "16px", fontWeight: "400", marginBottom: "28px", color: "#111" }}>Edit Novel</div>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>Cover Image <span style={{ color: "#ccc", textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                {editCoverPreview
+                  ? <img src={editCoverPreview} alt="cover preview" style={{ width: 52, height: 72, objectFit: "cover", borderRadius: "3px", border: "1px solid #e5e5e5", flexShrink: 0 }} />
+                  : <div style={{ width: 52, height: 72, background: "#f8f8f8", border: "1px dashed #ddd", borderRadius: "3px", display: "flex", alignItems: "center", justifyContent: "center", color: "#ccc", fontSize: "20px", flexShrink: 0 }}>📖</div>
+                }
+                <div style={{ flex: 1 }}>
+                  <input ref={editFileInputRef} type="file" accept="image/*" onChange={handleEditCoverChange} style={{ display: "none" }} id="edit-cover-upload" />
+                  <label htmlFor="edit-cover-upload"
+                    style={{ display: "inline-block", background: "#fff", color: "#555", border: "1px solid #e5e5e5", padding: "8px 14px", fontSize: "12px", fontFamily: "inherit", cursor: "pointer", borderRadius: "4px", letterSpacing: "0.03em" }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = "#ccc"}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e5e5"}
+                  >{editCoverPreview ? "Change image" : "Choose image"}</label>
+                  {editCoverPreview && (
+                    <button onClick={() => { setEditCoverPreview(null); setEditForm(f => ({ ...f, cover: null })); if (editFileInputRef.current) editFileInputRef.current.value = ""; }}
+                      style={{ display: "block", marginTop: "6px", background: "none", border: "none", color: "#bbb", fontSize: "11px", cursor: "pointer", padding: 0, fontFamily: "inherit" }}
+                      onMouseEnter={e => e.target.style.color = "#e55"} onMouseLeave={e => e.target.style.color = "#bbb"}
+                    >Remove</button>
+                  )}
+                </div>
+              </div>
+            </div>
             <FormFields f={editForm} setF={setEditForm} err={editError} inputStyle={inputStyle} />
             <div style={{ display: "flex", gap: "10px" }}>
               <button onClick={handleSaveEdit} style={{ flex: 1, background: "#111", color: "#fff", border: "none", padding: "11px", fontSize: "13px", fontFamily: "inherit", cursor: "pointer", borderRadius: "4px", letterSpacing: "0.04em" }} onMouseEnter={e => e.target.style.background = "#333"} onMouseLeave={e => e.target.style.background = "#111"}>Save Changes</button>

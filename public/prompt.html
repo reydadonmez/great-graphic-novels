@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prompt Template — My Graphic Novels</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #111;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 40px 56px 28px;
+      border-bottom: 1px solid #efefef;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .header-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      color: #aaa;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: -0.02em;
+      color: #111;
+    }
+    .back-link {
+      font-size: 12px;
+      color: #999;
+      text-decoration: none;
+      border: 1px solid #e5e5e5;
+      padding: 8px 14px;
+      border-radius: 4px;
+      transition: border-color 0.15s;
+    }
+    .back-link:hover { border-color: #ccc; color: #555; }
+
+    main { padding: 32px 56px 64px; max-width: 720px; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+
+    .card {
+      border: 1px solid #efefef;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 12px;
+    }
+
+    .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid #e5e5e5;
+      cursor: pointer;
+      color: #888;
+      background: #fff;
+      transition: all 0.12s;
+      user-select: none;
+      font-family: inherit;
+    }
+    .tag:hover { border-color: #ccc; color: #555; }
+    .tag.active {
+      background: #111;
+      border-color: #111;
+      color: #fff;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 76px;
+      resize: vertical;
+      font-size: 13px;
+      padding: 10px 12px;
+      border-radius: 4px;
+      border: 1px solid #e5e5e5;
+      background: #fff;
+      color: #111;
+      font-family: inherit;
+      line-height: 1.55;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { border-color: #111; }
+    textarea.short { min-height: 54px; }
+
+    .output-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .output-box {
+      background: #fafafa;
+      border: 1px solid #efefef;
+      border-radius: 6px;
+      padding: 16px;
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: #333;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+
+    .copy-btn {
+      margin-top: 12px;
+      width: 100%;
+      padding: 11px;
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      border-radius: 4px;
+      border: 1px solid #e5e5e5;
+      background: #111;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-family: inherit;
+    }
+    .copy-btn:hover { background: #333; }
+    .copy-btn.copied { background: #2a6b2a; border-color: #2a6b2a; }
+
+    .divider {
+      height: 1px;
+      background: #efefef;
+      margin: 20px 0;
+    }
+
+    .optional {
+      font-size: 11px;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      color: #ccc;
+      margin-left: 4px;
+    }
+
+    @media (max-width: 600px) {
+      header, main { padding-left: 20px; padding-right: 20px; }
+      header { padding-top: 28px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="header-eyebrow">My Graphic Novels</div>
+    <h1>Prompt Template</h1>
+  </div>
+  <a href="/" class="back-link">← Back to collection</a>
+</header>
+
+<main>
+
+  <div class="card">
+    <div class="section-label">Type of change</div>
+    <div class="tag-row" id="type-tags">
+      <button class="tag" data-val="UI change">UI change</button>
+      <button class="tag" data-val="New feature">New feature</button>
+      <button class="tag" data-val="Bug fix">Bug fix</button>
+      <button class="tag" data-val="Refactor">Refactor</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-label">What do you want to change?</div>
+    <textarea id="change-desc" placeholder="e.g. Add a search bar that filters novels by title or writer"></textarea>
+  </div>
+
+  <div class="card">
+    <div class="section-label">Current behaviour <span class="optional">(optional)</span></div>
+    <textarea id="current-behaviour" class="short" placeholder="e.g. There is no way to search — users must scroll through the full list"></textarea>
+  </div>
+
+  <div class="card">
+    <div class="section-label">Expected result</div>
+    <textarea id="expected-result" class="short" placeholder="e.g. A search input at the top filters the list in real time as the user types"></textarea>
+  </div>
+
+  <div class="card">
+    <div class="section-label">Files to touch</div>
+    <div class="tag-row" id="file-tags">
+      <button class="tag active" data-val="src/App.jsx">src/App.jsx</button>
+      <button class="tag" data-val="index.html">index.html</button>
+      <button class="tag" data-val="package.json">package.json</button>
+      <button class="tag" data-val="vite.config.js">vite.config.js</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-label">Additional notes <span class="optional">(optional)</span></div>
+    <textarea id="notes" class="short" placeholder="e.g. Keep the existing minimal black-and-white aesthetic. Don't change the list grid layout."></textarea>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="output-label">
+    <div class="section-label" style="margin:0">Generated prompt</div>
+  </div>
+  <div class="output-box" id="output">Fill in the fields above to generate your prompt.</div>
+  <button class="copy-btn" id="copy-btn">Copy prompt</button>
+
+</main>
+
+<script>
+  const REPO = "https://github.com/reydadonmez/graphic-novels-pwa.git";
+  const STACK = "React + Vite PWA. Main component: src/App.jsx. Uses localStorage for persistence. Deployed on Vercel via GitHub main branch.";
+
+  function getSelected(groupId) {
+    return [...document.querySelectorAll("#" + groupId + " .tag.active")].map(t => t.dataset.val);
+  }
+
+  function val(id) { return document.getElementById(id).value.trim(); }
+
+  function buildPrompt() {
+    const type = getSelected("type-tags").join(", ") || "—";
+    const files = getSelected("file-tags").join(", ") || "src/App.jsx";
+    const change = val("change-desc") || "—";
+    const current = val("current-behaviour");
+    const expected = val("expected-result") || "—";
+    const notes = val("notes");
+
+    let p = "Repo: " + REPO + "\nStack: " + STACK + "\n\nType: " + type + "\nFiles: " + files + "\n\nChange:\n" + change;
+    if (current) p += "\n\nCurrent behaviour:\n" + current;
+    p += "\n\nExpected result:\n" + expected;
+    if (notes) p += "\n\nNotes:\n" + notes;
+    p += "\n\nAfter making the changes, push to the main branch on GitHub and confirm the commit SHA.";
+    return p;
+  }
+
+  function updateOutput() {
+    document.getElementById("output").textContent = buildPrompt();
+  }
+
+  document.querySelectorAll(".tag").forEach(function(tag) {
+    tag.addEventListener("click", function() {
+      tag.classList.toggle("active");
+      updateOutput();
+    });
+  });
+
+  ["change-desc", "current-behaviour", "expected-result", "notes"].forEach(function(id) {
+    document.getElementById(id).addEventListener("input", updateOutput);
+  });
+
+  document.getElementById("copy-btn").addEventListener("click", function() {
+    var text = buildPrompt();
+    navigator.clipboard.writeText(text).then(function() {
+      var btn = document.getElementById("copy-btn");
+      btn.classList.add("copied");
+      btn.textContent = "✓ Copied!";
+      setTimeout(function() {
+        btn.classList.remove("copied");
+        btn.textContent = "Copy prompt";
+      }, 2000);
+    });
+  });
+
+  updateOutput();
+</script>
+
+</body>
+</html>

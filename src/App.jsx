@@ -1,6 +1,24 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { supabase } from "./supabase";
 
-const STORAGE_KEY = "graphic-novels-v1";
+// ── DB helpers ───────────────────────────────────────────────────────────────
+const toNovel = (row) => ({
+  id: row.id,
+  title: row.title,
+  writer: row.writer,
+  rating: row.rating,
+  dateRead: row.date_read || "",
+  cover: row.cover || null,
+});
+
+const toRow = (novel, userId) => ({
+  user_id: userId,
+  title: novel.title,
+  writer: novel.writer,
+  rating: novel.rating,
+  date_read: novel.dateRead || null,
+  cover: novel.cover || null,
+});
 
 // ── Responsive hook ──────────────────────────────────────────────────────────
 function useWindowWidth() {
@@ -101,7 +119,7 @@ const FormFields = ({ f, setF, err, inputStyle }) => (
   </>
 );
 
-// ── Cover upload section (reusable) ──────────────────────────────────────────
+// ── Cover upload section ─────────────────────────────────────────────────────
 const CoverUpload = ({ preview, onFile, onRemove, fileRef, inputId }) => (
   <div style={{ marginBottom: "20px" }}>
     <label style={{ display: "block", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>
@@ -130,12 +148,98 @@ const CoverUpload = ({ preview, onFile, onRemove, fileRef, inputId }) => (
   </div>
 );
 
+// ── Auth Screen ──────────────────────────────────────────────────────────────
+const AuthScreen = ({ isMobile }) => {
+  const [mode, setMode] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const inputStyle = {
+    width: "100%", background: "#fff", border: "1px solid #e5e5e5", color: "#111",
+    padding: "10px 12px", fontSize: "14px", fontFamily: "inherit", outline: "none",
+    boxSizing: "border-box", borderRadius: "4px",
+  };
+
+  const handleSubmit = async () => {
+    setError("");
+    setLoading(true);
+    if (mode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+    } else {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) setError(error.message);
+      else setSent(true);
+    }
+    setLoading(false);
+  };
+
+  const handleKey = (e) => { if (e.key === "Enter") handleSubmit(); };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", padding: "24px" }}>
+      <div style={{ width: "100%", maxWidth: "360px" }}>
+        <div style={{ marginBottom: "40px", textAlign: "center" }}>
+          <div style={{ fontSize: "11px", letterSpacing: "0.18em", color: "#aaa", textTransform: "uppercase", marginBottom: "8px" }}>Personal Archive</div>
+          <h1 style={{ margin: 0, fontSize: isMobile ? "22px" : "28px", fontWeight: "300", letterSpacing: "-0.02em", color: "#111" }}>My Graphic Novels</h1>
+        </div>
+
+        {sent ? (
+          <div style={{ textAlign: "center", color: "#555", fontSize: "14px", lineHeight: 1.6 }}>
+            <div style={{ fontSize: "28px", marginBottom: "16px" }}>✉️</div>
+            Check your email for a confirmation link, then come back and sign in.
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Email</label>
+              <input
+                type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={handleKey}
+                placeholder="you@example.com" style={inputStyle} autoComplete="email"
+                onFocus={e => e.target.style.borderColor = "#111"} onBlur={e => e.target.style.borderColor = "#e5e5e5"}
+              />
+            </div>
+            <div style={{ marginBottom: "24px" }}>
+              <label style={{ display: "block", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "6px" }}>Password</label>
+              <input
+                type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={handleKey}
+                placeholder="••••••••" style={inputStyle} autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                onFocus={e => e.target.style.borderColor = "#111"} onBlur={e => e.target.style.borderColor = "#e5e5e5"}
+              />
+            </div>
+            {error && <div style={{ color: "#e55", fontSize: "12px", marginBottom: "14px" }}>{error}</div>}
+            <button
+              onClick={handleSubmit} disabled={loading}
+              style={{ width: "100%", background: "#111", color: "#fff", border: "none", padding: "12px", fontSize: "13px", letterSpacing: "0.04em", fontFamily: "inherit", cursor: loading ? "default" : "pointer", borderRadius: "4px", opacity: loading ? 0.6 : 1 }}
+              onMouseEnter={e => { if (!loading) e.target.style.background = "#333"; }}
+              onMouseLeave={e => { e.target.style.background = "#111"; }}
+            >{loading ? "…" : mode === "signin" ? "Sign In" : "Create Account"}</button>
+            <div style={{ textAlign: "center", marginTop: "20px", fontSize: "12px", color: "#bbb" }}>
+              {mode === "signin" ? "No account? " : "Already have one? "}
+              <button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
+                style={{ background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: "12px", fontFamily: "inherit", textDecoration: "underline", padding: 0 }}>
+                {mode === "signin" ? "Sign up" : "Sign in"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const w = useWindowWidth();
   const isMobile = w < 600;
   const isTablet = w >= 600 && w < 960;
   const px = isMobile ? "16px" : isTablet ? "28px" : "56px";
+
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   const [novels, setNovels] = useState([]);
   const [ready, setReady] = useState(false);
@@ -155,24 +259,28 @@ export default function App() {
   const [editCoverPreview, setEditCoverPreview] = useState(null);
   const fileInputRef = useRef(null);
   const editFileInputRef = useRef(null);
-  const initialized = useRef(false);
 
+  // ── Auth listener ──────────────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setNovels(parsed);
-      }
-    } catch (e) {}
-    setReady(true);
-    initialized.current = true;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
+  // ── Load novels from Supabase ──────────────────────────────────────────────
   useEffect(() => {
-    if (!initialized.current) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(novels)); } catch (e) {}
-  }, [novels]);
+    if (!user) { setNovels([]); setReady(false); return; }
+    supabase.from("novels").select("*").eq("user_id", user.id).order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data) setNovels(data.map(toNovel));
+        setReady(true);
+      });
+  }, [user]);
 
   const sorted = useMemo(() => [...novels].sort((a, b) =>
     sortMode === "alpha" ? a.title.localeCompare(b.title) : b.rating - a.rating
@@ -196,11 +304,13 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.title.trim()) return setError("Title is required.");
     if (!form.writer.trim()) return setError("Writer is required.");
     if (!form.rating) return setError("Please select a rating.");
-    setNovels(prev => [...prev, { ...form, id: Date.now() }]);
+    const { data, error } = await supabase.from("novels").insert(toRow(form, user.id)).select().single();
+    if (error) return setError("Could not save. Please try again.");
+    setNovels(prev => [...prev, toNovel(data)]);
     setAdded(form.title);
     resetForm();
     setError("");
@@ -215,15 +325,23 @@ export default function App() {
     if (editFileInputRef.current) editFileInputRef.current.value = "";
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editForm.title.trim()) return setEditError("Title is required.");
     if (!editForm.writer.trim()) return setEditError("Writer is required.");
     if (!editForm.rating) return setEditError("Please select a rating.");
+    const { error } = await supabase.from("novels").update({
+      title: editForm.title, writer: editForm.writer, rating: editForm.rating,
+      date_read: editForm.dateRead || null, cover: editForm.cover || null,
+    }).eq("id", editingId);
+    if (error) return setEditError("Could not save. Please try again.");
     setNovels(prev => prev.map(n => n.id === editingId ? { ...n, ...editForm } : n));
     setEditingId(null);
   };
 
-  const handleDelete = (id) => setNovels(prev => prev.filter(n => n.id !== id));
+  const handleDelete = async (id) => {
+    await supabase.from("novels").delete().eq("id", id);
+    setNovels(prev => prev.filter(n => n.id !== id));
+  };
 
   const handleExport = () => {
     navigator.clipboard.writeText(JSON.stringify(novels, null, 2)).then(() => {
@@ -232,11 +350,14 @@ export default function App() {
     });
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     try {
       const parsed = JSON.parse(importText);
       if (!Array.isArray(parsed)) throw new Error();
-      setNovels(parsed);
+      const rows = parsed.map(n => toRow(n, user.id));
+      const { data, error } = await supabase.from("novels").insert(rows).select();
+      if (error) throw error;
+      setNovels(prev => [...prev, ...data.map(toNovel)]);
       setShowImport(false);
       setImportText("");
       setImportError("");
@@ -244,6 +365,8 @@ export default function App() {
       setImportError("Invalid data. Please paste a valid export.");
     }
   };
+
+  const handleSignOut = () => supabase.auth.signOut();
 
   const inputStyle = {
     width: "100%", background: "#fff", border: "1px solid #e5e5e5", color: "#111",
@@ -271,12 +394,20 @@ export default function App() {
     maxHeight: "90vh", overflowY: "auto",
   };
 
-  // Desktop grid: # | cover | title | writer | rating | date | actions
-  // Tablet grid:  # | cover | title | rating | actions  (drop writer + date)
-  // Mobile: flex card rows
   const desktopCols = "32px 48px 1fr 160px 100px 110px 56px";
   const tabletCols  = "28px 40px 1fr 90px 44px";
 
+  // ── Waiting for auth to resolve ────────────────────────────────────────────
+  if (!authReady) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Helvetica Neue, sans-serif", color: "#ccc", fontSize: "13px" }}>
+      Loading…
+    </div>
+  );
+
+  // ── Not logged in ──────────────────────────────────────────────────────────
+  if (!user) return <AuthScreen isMobile={isMobile} />;
+
+  // ── Loading novels ─────────────────────────────────────────────────────────
   if (!ready) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Helvetica Neue, sans-serif", color: "#ccc", fontSize: "13px" }}>
       Loading…
@@ -324,15 +455,13 @@ export default function App() {
             style={{ background: "#111", color: "#fff", border: "none", padding: isMobile ? "9px 14px" : "11px 22px", fontSize: "13px", letterSpacing: "0.04em", fontFamily: "inherit", cursor: "pointer", borderRadius: "4px" }}
             onMouseEnter={e => e.target.style.background = "#333"} onMouseLeave={e => e.target.style.background = "#111"}
           >+ Add Novel</button>
+          <button onClick={handleSignOut}
+            style={{ background: "transparent", color: "#ccc", border: "1px solid #e5e5e5", padding: isMobile ? "8px 12px" : "10px 16px", fontSize: "12px", fontFamily: "inherit", cursor: "pointer", borderRadius: "4px", letterSpacing: "0.03em" }}
+            onMouseEnter={e => { e.target.style.color = "#888"; e.target.style.borderColor = "#ccc"; }}
+            onMouseLeave={e => { e.target.style.color = "#ccc"; e.target.style.borderColor = "#e5e5e5"; }}
+          >Sign out</button>
         </div>
       </div>
-
-      {/* ── Hint banner ─────────────────────────────────────────────────────── */}
-      {novels.length > 0 && (
-        <div style={{ padding: `10px ${px}`, background: "#fafafa", borderBottom: "1px solid #efefef", fontSize: "12px", color: "#bbb" }}>
-          💡 Use the <strong style={{ color: "#999" }}>↓ export</strong> and <strong style={{ color: "#999" }}>↑ import</strong> buttons to save and restore your collection.
-        </div>
-      )}
 
       {/* ── Sort controls ───────────────────────────────────────────────────── */}
       <div style={{ padding: `16px ${px}`, display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #efefef" }}>
@@ -354,9 +483,8 @@ export default function App() {
           </div>
 
         ) : isMobile ? (
-          /* ── Mobile: card rows ── */
           <div>
-            {sorted.map((novel, i) => (
+            {sorted.map((novel) => (
               <div key={novel.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: "1px solid #f5f5f5" }}>
                 <CoverImage src={novel.cover} size={32} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -377,7 +505,6 @@ export default function App() {
           </div>
 
         ) : isTablet ? (
-          /* ── Tablet: condensed table (drops writer + date columns) ── */
           <>
             <div style={{ display: "grid", gridTemplateColumns: tabletCols, gap: "0 12px", padding: "16px 8px 8px", borderBottom: "1px solid #efefef", fontSize: "10px", letterSpacing: "0.14em", color: "#bbb", textTransform: "uppercase" }}>
               <div>#</div><div></div><div>Title / Writer</div><div>Rating</div><div></div>
@@ -408,7 +535,6 @@ export default function App() {
           </>
 
         ) : (
-          /* ── Desktop: full table ── */
           <>
             <div style={{ display: "grid", gridTemplateColumns: desktopCols, gap: "0 16px", padding: "16px 8px 8px", borderBottom: "1px solid #efefef", fontSize: "10px", letterSpacing: "0.14em", color: "#bbb", textTransform: "uppercase" }}>
               <div>#</div><div>Cover</div><div>Title</div><div>Writer</div><div>Rating</div><div>Date Read</div><div></div>

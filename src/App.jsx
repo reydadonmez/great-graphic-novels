@@ -1,5 +1,22 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, forwardRef } from "react";
 import { supabase } from "./supabase";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ── DB helpers ───────────────────────────────────────────────────────────────
 const toNovel = (row) => ({
@@ -52,31 +69,25 @@ const EditIcon = () => (
   </svg>
 );
 
-// ── Cover helpers ────────────────────────────────────────────────────────────
-const CoverPlaceholder = ({ size = 40 }) => (
-  <div style={{
-    width: size, height: size * 1.4, background: "#f5f5f5", border: "1px solid #ebebeb",
-    borderRadius: "2px", display: "flex", alignItems: "center", justifyContent: "center",
-    flexShrink: 0, color: "#ccc", fontSize: size * 0.35,
-  }}>📖</div>
+const GripIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="3.5" cy="2" r="1.2"/><circle cx="8.5" cy="2" r="1.2"/>
+    <circle cx="3.5" cy="6" r="1.2"/><circle cx="8.5" cy="6" r="1.2"/>
+    <circle cx="3.5" cy="10" r="1.2"/><circle cx="8.5" cy="10" r="1.2"/>
+  </svg>
 );
-
-const CoverImage = ({ src, size = 40 }) =>
-  src
-    ? <img src={src} alt="cover" style={{ width: size, height: size * 1.4, objectFit: "cover", borderRadius: "2px", border: "1px solid #ebebeb", flexShrink: 0, display: "block" }} />
-    : <CoverPlaceholder size={size} />;
 
 // ── Star Rating ──────────────────────────────────────────────────────────────
 const StarRating = ({ value, onChange, readonly = false }) => {
   const [hovered, setHovered] = useState(0);
   return (
-    <div style={{ display: "flex", gap: "3px" }}>
+    <div style={{ display: "flex", gap: "2px" }}>
       {[1, 2, 3, 4, 5].map((star) => (
         <span key={star}
           onClick={() => !readonly && onChange && onChange(star)}
           onMouseEnter={() => !readonly && setHovered(star)}
           onMouseLeave={() => !readonly && setHovered(0)}
-          style={{ fontSize: readonly ? "13px" : "22px", cursor: readonly ? "default" : "pointer", color: star <= (hovered || value) ? "#111" : "#ddd", transition: "color 0.1s ease", lineHeight: 1 }}
+          style={{ fontSize: readonly ? "12px" : "22px", cursor: readonly ? "default" : "pointer", color: star <= (hovered || value) ? "#111" : "#ddd", transition: "color 0.1s ease", lineHeight: 1 }}
         >★</span>
       ))}
     </div>
@@ -231,6 +242,136 @@ const AuthScreen = ({ isMobile }) => {
   );
 };
 
+// ── Novel Card ───────────────────────────────────────────────────────────────
+const NovelCard = forwardRef(function NovelCard(
+  { novel, onEdit, onDelete, isDragging = false, isOverlay = false, dragListeners = {}, dragAttributes = {}, style = {} },
+  ref
+) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      ref={ref}
+      {...dragAttributes}
+      {...dragListeners}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: "#fff",
+        border: "1px solid #e5e5e5",
+        borderRadius: "8px",
+        overflow: "hidden",
+        position: "relative",
+        cursor: isOverlay ? "grabbing" : "grab",
+        userSelect: "none",
+        touchAction: "none",
+        boxShadow: isOverlay
+          ? "0 20px 48px rgba(0,0,0,0.18)"
+          : hovered ? "0 4px 16px rgba(0,0,0,0.08)" : "0 1px 4px rgba(0,0,0,0.05)",
+        transform: isOverlay ? "rotate(2deg) scale(1.03)" : undefined,
+        transition: isOverlay ? "none" : "box-shadow 0.15s",
+        ...style,
+      }}
+    >
+      {/* Grip handle – visual only */}
+      <div style={{
+        position: "absolute",
+        top: "8px",
+        right: "8px",
+        color: hovered || isOverlay ? "#c0c0c0" : "transparent",
+        transition: "color 0.15s",
+        zIndex: 4,
+        pointerEvents: "none",
+        lineHeight: 1,
+      }}>
+        <GripIcon />
+      </div>
+
+      {/* Cover */}
+      <div style={{ paddingTop: "140%", position: "relative", background: "#f0f0f0", overflow: "hidden" }}>
+        {novel.cover
+          ? <img src={novel.cover} alt="cover" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "36px", color: "#ccc" }}>📖</div>
+        }
+      </div>
+
+      {/* Content */}
+      <div style={{ padding: "10px 12px 12px" }}>
+        <div style={{
+          fontSize: "13px",
+          fontWeight: "500",
+          color: "#111",
+          marginBottom: "3px",
+          lineHeight: "1.35",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}>{novel.title}</div>
+        <div style={{ fontSize: "11px", color: "#aaa", marginBottom: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.writer}</div>
+        <StarRating value={novel.rating} readonly />
+        {novel.dateRead && (
+          <div style={{ fontSize: "11px", color: "#bbb", marginTop: "5px" }}>{formatDate(novel.dateRead)}</div>
+        )}
+        {/* Spacer so action buttons don't overlap text */}
+        <div style={{ height: "28px" }} />
+      </div>
+
+      {/* Action buttons */}
+      <div style={{
+        position: "absolute",
+        bottom: "10px",
+        right: "10px",
+        display: "flex",
+        gap: "4px",
+        opacity: hovered ? 1 : 0,
+        transition: "opacity 0.15s",
+        zIndex: 5,
+      }}>
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onEdit(novel); }}
+          style={{ background: "#fff", border: "1px solid #e5e5e5", color: "#bbb", cursor: "pointer", padding: "5px 7px", borderRadius: "4px", display: "flex", alignItems: "center", lineHeight: 1 }}
+          onMouseEnter={e => { e.currentTarget.style.color = "#555"; e.currentTarget.style.borderColor = "#ccc"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "#bbb"; e.currentTarget.style.borderColor = "#e5e5e5"; }}
+          title="Edit"
+        ><EditIcon /></button>
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onDelete(novel.id); }}
+          style={{ background: "#fff", border: "1px solid #e5e5e5", color: "#ccc", cursor: "pointer", padding: "5px 8px", borderRadius: "4px", fontSize: "16px", lineHeight: 1 }}
+          onMouseEnter={e => { e.currentTarget.style.color = "#e55"; e.currentTarget.style.borderColor = "#e55"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; e.currentTarget.style.borderColor = "#e5e5e5"; }}
+          title="Delete"
+        >×</button>
+      </div>
+    </div>
+  );
+});
+
+// ── Sortable Novel Card ──────────────────────────────────────────────────────
+const SortableNovelCard = ({ novel, onEdit, onDelete }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: novel.id });
+
+  return (
+    <NovelCard
+      ref={setNodeRef}
+      novel={novel}
+      onEdit={onEdit}
+      onDelete={onDelete}
+      isDragging={isDragging}
+      dragListeners={listeners}
+      dragAttributes={attributes}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.25 : 1,
+        zIndex: isDragging ? 10 : 0,
+      }}
+    />
+  );
+};
+
 // ── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const w = useWindowWidth();
@@ -244,6 +385,11 @@ export default function App() {
   const [novels, setNovels] = useState([]);
   const [ready, setReady] = useState(false);
   const [sortMode, setSortMode] = useState("alpha");
+
+  // Drag-and-drop state
+  const [activeId, setActiveId] = useState(null);
+  const [customOrder, setCustomOrder] = useState([]);
+
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
@@ -282,10 +428,44 @@ export default function App() {
       });
   }, [user]);
 
-  const sorted = useMemo(() => [...novels].sort((a, b) =>
-    sortMode === "alpha" ? a.title.localeCompare(b.title) : b.rating - a.rating
-  ), [novels, sortMode]);
+  // ── Keep customOrder in sync with novels ───────────────────────────────────
+  useEffect(() => {
+    setCustomOrder(prev => {
+      const novelIds = novels.map(n => n.id);
+      const novelIdSet = new Set(novelIds);
+      const kept = prev.filter(id => novelIdSet.has(id));
+      const added = novelIds.filter(id => !prev.includes(id));
+      return [...kept, ...added];
+    });
+  }, [novels]);
 
+  // ── Displayed novels (sorted or custom-ordered) ────────────────────────────
+  const displayedNovels = useMemo(() => {
+    if (sortMode === "alpha") return [...novels].sort((a, b) => a.title.localeCompare(b.title));
+    if (sortMode === "rating") return [...novels].sort((a, b) => b.rating - a.rating);
+    return customOrder.map(id => novels.find(n => n.id === id)).filter(Boolean);
+  }, [novels, sortMode, customOrder]);
+
+  // ── DnD sensors ───────────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragStart = ({ active }) => setActiveId(active.id);
+
+  const handleDragEnd = ({ active, over }) => {
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    const currentIds = displayedNovels.map(n => n.id);
+    const oldIndex = currentIds.indexOf(active.id);
+    const newIndex = currentIds.indexOf(over.id);
+    const newOrder = arrayMove(currentIds, oldIndex, newIndex);
+    setCustomOrder(newOrder);
+    setSortMode("custom");
+  };
+
+  // ── Cover handler ──────────────────────────────────────────────────────────
   const makeCoverHandler = (setPreview, setFormFn) => (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -394,8 +574,8 @@ export default function App() {
     maxHeight: "90vh", overflowY: "auto",
   };
 
-  const desktopCols = "32px 48px 1fr 160px 100px 110px 56px";
-  const tabletCols  = "28px 40px 1fr 90px 44px";
+  // ── Active novel for the drag overlay ─────────────────────────────────────
+  const activeNovel = activeId ? novels.find(n => n.id === activeId) : null;
 
   // ── Waiting for auth to resolve ────────────────────────────────────────────
   if (!authReady) return (
@@ -404,15 +584,15 @@ export default function App() {
     </div>
   );
 
-  // ── Not logged in ──────────────────────────────────────────────────────────
   if (!user) return <AuthScreen isMobile={isMobile} />;
 
-  // ── Loading novels ─────────────────────────────────────────────────────────
   if (!ready) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Helvetica Neue, sans-serif", color: "#ccc", fontSize: "13px" }}>
       Loading…
     </div>
   );
+
+  const cardMinWidth = isMobile ? "140px" : "160px";
 
   return (
     <div style={{ minHeight: "100vh", background: "#fff", color: "#111", fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
@@ -464,106 +644,65 @@ export default function App() {
       </div>
 
       {/* ── Sort controls ───────────────────────────────────────────────────── */}
-      <div style={{ padding: `16px ${px}`, display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #efefef" }}>
+      <div style={{ padding: `14px ${px}`, display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #efefef", flexWrap: "wrap" }}>
         <span style={{ fontSize: "11px", color: "#bbb", letterSpacing: "0.12em", textTransform: "uppercase", marginRight: "4px" }}>Sort</span>
-        {["alpha", "rating"].map((mode) => (
-          <button key={mode} onClick={() => setSortMode(mode)}
-            style={{ background: sortMode === mode ? "#111" : "transparent", color: sortMode === mode ? "#fff" : "#999", border: "1px solid " + (sortMode === mode ? "#111" : "#e5e5e5"), padding: "5px 14px", fontSize: "12px", letterSpacing: "0.06em", fontFamily: "inherit", cursor: "pointer", borderRadius: "20px", transition: "all 0.15s" }}
-          >{mode === "alpha" ? "A → Z" : "★ Rating"}</button>
+        {[
+          { key: "alpha",  label: "A → Z" },
+          { key: "rating", label: "★ Rating" },
+          { key: "custom", label: "Custom" },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => setSortMode(key)}
+            style={{ background: sortMode === key ? "#111" : "transparent", color: sortMode === key ? "#fff" : "#999", border: "1px solid " + (sortMode === key ? "#111" : "#e5e5e5"), padding: "5px 14px", fontSize: "12px", letterSpacing: "0.06em", fontFamily: "inherit", cursor: "pointer", borderRadius: "20px", transition: "all 0.15s" }}
+          >{label}</button>
         ))}
+        {sortMode === "custom" && (
+          <span style={{ fontSize: "11px", color: "#bbb", marginLeft: "4px" }}>Drag cards to rearrange</span>
+        )}
         <span style={{ marginLeft: "auto", fontSize: "12px", color: "#ccc" }}>{novels.length} {novels.length === 1 ? "volume" : "volumes"}</span>
       </div>
 
-      {/* ── List ────────────────────────────────────────────────────────────── */}
-      <div style={{ padding: `8px ${px} 56px` }}>
-        {sorted.length === 0 ? (
+      {/* ── Canvas ──────────────────────────────────────────────────────────── */}
+      <div style={{ padding: `20px ${px} 64px` }}>
+        {displayedNovels.length === 0 ? (
           <div style={{ textAlign: "center", padding: "80px 0", color: "#ccc" }}>
             <div style={{ fontSize: "40px", marginBottom: "14px" }}>📚</div>
             <div style={{ fontSize: "14px" }}>Your shelf is empty. Add your first graphic novel.</div>
           </div>
-
-        ) : isMobile ? (
-          <div>
-            {sorted.map((novel) => (
-              <div key={novel.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: "1px solid #f5f5f5" }}>
-                <CoverImage src={novel.cover} size={32} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "15px", color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.title}</div>
-                  <div style={{ fontSize: "12px", color: "#aaa", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.writer}</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                  <StarRating value={novel.rating} readonly />
-                  <button onClick={() => openEdit(novel)} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", padding: "4px", lineHeight: 1, transition: "color 0.15s", display: "flex", alignItems: "center" }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#555"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}
-                  ><EditIcon /></button>
-                  <button onClick={() => handleDelete(novel.id)} style={{ background: "transparent", border: "none", color: "#ddd", cursor: "pointer", fontSize: "18px", padding: "0", lineHeight: 1, transition: "color 0.15s" }}
-                    onMouseEnter={e => e.target.style.color = "#e55"} onMouseLeave={e => e.target.style.color = "#ddd"}
-                  >×</button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-        ) : isTablet ? (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: tabletCols, gap: "0 12px", padding: "16px 8px 8px", borderBottom: "1px solid #efefef", fontSize: "10px", letterSpacing: "0.14em", color: "#bbb", textTransform: "uppercase" }}>
-              <div>#</div><div></div><div>Title / Writer</div><div>Rating</div><div></div>
-            </div>
-            {sorted.map((novel, i) => (
-              <div key={novel.id}
-                style={{ display: "grid", gridTemplateColumns: tabletCols, gap: "0 12px", padding: "10px 8px", borderBottom: "1px solid #f5f5f5", alignItems: "center", transition: "background 0.1s", borderRadius: "4px", margin: "0 -8px" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#fafafa"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-              >
-                <div style={{ fontSize: "11px", color: "#ddd" }}>{String(i + 1).padStart(2, "0")}</div>
-                <CoverImage src={novel.cover} size={28} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: "14px", color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.title}</div>
-                  <div style={{ fontSize: "11px", color: "#aaa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: "2px" }}>{novel.writer}</div>
-                </div>
-                <StarRating value={novel.rating} readonly />
-                <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                  <button onClick={() => openEdit(novel)} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", padding: "4px", lineHeight: 1, transition: "color 0.15s", display: "flex", alignItems: "center" }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#555"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}
-                  ><EditIcon /></button>
-                  <button onClick={() => handleDelete(novel.id)} style={{ background: "transparent", border: "none", color: "#ddd", cursor: "pointer", fontSize: "18px", padding: "0 2px", lineHeight: 1, transition: "color 0.15s" }}
-                    onMouseEnter={e => e.target.style.color = "#e55"} onMouseLeave={e => e.target.style.color = "#ddd"}
-                  >×</button>
-                </div>
-              </div>
-            ))}
-          </>
-
         ) : (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: desktopCols, gap: "0 16px", padding: "16px 8px 8px", borderBottom: "1px solid #efefef", fontSize: "10px", letterSpacing: "0.14em", color: "#bbb", textTransform: "uppercase" }}>
-              <div>#</div><div>Cover</div><div>Title</div><div>Writer</div><div>Rating</div><div>Date Read</div><div></div>
-            </div>
-            {sorted.map((novel, i) => (
-              <div key={novel.id}
-                style={{ display: "grid", gridTemplateColumns: desktopCols, gap: "0 16px", padding: "10px 8px", borderBottom: "1px solid #f5f5f5", alignItems: "center", transition: "background 0.1s", borderRadius: "4px", margin: "0 -8px" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#fafafa"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-              >
-                <div style={{ fontSize: "11px", color: "#ddd" }}>{String(i + 1).padStart(2, "0")}</div>
-                <CoverImage src={novel.cover} size={32} />
-                <div style={{ fontSize: "15px", color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.title}</div>
-                <div style={{ fontSize: "13px", color: "#888", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{novel.writer}</div>
-                <StarRating value={novel.rating} readonly />
-                <div style={{ fontSize: "12px", color: "#aaa" }}>{formatDate(novel.dateRead) || <span style={{ color: "#ddd" }}>—</span>}</div>
-                <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                  <button onClick={() => openEdit(novel)} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", padding: "4px", lineHeight: 1, transition: "color 0.15s", display: "flex", alignItems: "center" }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#555"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}
-                    title="Edit"
-                  ><EditIcon /></button>
-                  <button onClick={() => handleDelete(novel.id)} style={{ background: "transparent", border: "none", color: "#ddd", cursor: "pointer", fontSize: "18px", padding: "0 2px", lineHeight: 1, transition: "color 0.15s" }}
-                    onMouseEnter={e => e.target.style.color = "#e55"} onMouseLeave={e => e.target.style.color = "#ddd"}
-                    title="Delete"
-                  >×</button>
-                </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={displayedNovels.map(n => n.id)} strategy={rectSortingStrategy}>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`,
+                gap: isMobile ? "12px" : "16px",
+              }}>
+                {displayedNovels.map(novel => (
+                  <SortableNovelCard
+                    key={novel.id}
+                    novel={novel}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                  />
+                ))}
               </div>
-            ))}
-          </>
+            </SortableContext>
+
+            <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
+              {activeNovel ? (
+                <NovelCard
+                  novel={activeNovel}
+                  onEdit={() => {}}
+                  onDelete={() => {}}
+                  isOverlay
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )}
       </div>
 

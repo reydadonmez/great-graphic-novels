@@ -1,0 +1,6 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0C0B09; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0C0B09; }
+::-webkit-scrollbar-thumb { background: rgba(242,237,228,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(242,237,228,0.22); }

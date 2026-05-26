@@ -454,12 +454,12 @@ export default function App() {
               onClick={()=>setExpandedId(expandedId===b.id?null:b.id)}
               style={{cursor:"pointer"}}>
               {/* Cover */}
-              <div style={{aspectRatio:"2/3",background:b.coverColor,position:"relative",overflow:"hidden",marginBottom:"0.6rem",transition:"transform 0.25s ease",transform:hoveredId===b.id?"scale(1.02)":"scale(1)"}}>
+              <div style={{position:"relative",paddingBottom:"150%",background:b.coverColor,overflow:"hidden",marginBottom:"0.6rem",transition:"transform 0.25s ease",transform:hoveredId===b.id?"scale(1.02)":"scale(1)"}}>
                 {b.coverImage
-                  ?<img src={b.coverImage} alt={b.title} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>
+                  ?<img src={b.coverImage} alt={b.title} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"cover"}}/>
                   :<div style={{position:"absolute",top:0,left:0,right:0,height:2,background:b.coverAccent}}/>
                 }
-                <div style={{position:"absolute",inset:0,background:"rgba(12,11,9,0.04)",opacity:hoveredId===b.id?1:0,transition:"opacity 0.2s"}}/>
+                <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(12,11,9,0.04)",opacity:hoveredId===b.id?1:0,transition:"opacity 0.2s"}}/>
               </div>
               <p style={{fontFamily:"'DM Sans',sans-serif",fontSize:13,fontWeight:500,color:"#0C0B09",margin:"0 0 2px",lineHeight:1.3,letterSpacing:"-0.01em"}}>{b.title}</p>
               <p style={{fontFamily:"'DM Sans',sans-serif",fontSize:12,color:"#B0A89E",margin:"0 0 6px",lineHeight:1.3}}>{b.writer}</p>

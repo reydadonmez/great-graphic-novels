@@ -62,7 +62,7 @@ const EMPTY_FORM = {
   title:"", writer:"", artist:"", colorist:"", publisher:"", imprint:"",
   year: new Date().getFullYear(), format:"Trade Paperback",
   genres:"", artStyle:"", moods:"", description:"",
-  coverColor:"#1A2744", coverAccent:"#4A6FA5", coverImageData:null
+  coverColor:"#1A2744", coverAccent:"#4A6FA5", coverImageData:null, coverFile:null
 };
 const FORMATS = ["Single Issue","Trade Paperback","Hardcover","Omnibus","Deluxe Edition","Complete Edition"];
 const COVER_PRESETS = [
@@ -72,7 +72,7 @@ const COVER_PRESETS = [
   {bg:"#1A1410",accent:"#6B4A24"},{bg:"#1E2A2C",accent:"#4A8C9A"},{bg:"#1E1A2C",accent:"#5A4A8C"},
 ];
 
-async function resizeImage(file, maxW=480, maxH=720) {
+async function resizeToBlob(file, maxW=480, maxH=720) {
   return new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -84,12 +84,23 @@ async function resizeImage(file, maxW=480, maxH=720) {
         const c = document.createElement("canvas");
         c.width=w; c.height=h;
         c.getContext("2d").drawImage(img,0,0,w,h);
-        resolve(c.toDataURL("image/jpeg", 0.82));
+        c.toBlob(blob => resolve(blob), "image/jpeg", 0.82);
       };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
   });
+}
+
+async function uploadCover(file, bookId) {
+  const blob = await resizeToBlob(file);
+  const filename = `${bookId}.jpg`;
+  const { error } = await supabase.storage
+    .from("covers")
+    .upload(filename, blob, { contentType: "image/jpeg", upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from("covers").getPublicUrl(filename);
+  return data.publicUrl;
 }
 
 export default function App() {
@@ -179,9 +190,10 @@ export default function App() {
 
   async function handleImageSelect(e) {
     const file = e.target.files[0]; if(!file) return;
-    setForm(f=>({...f, coverImageData:"loading"}));
-    const resized = await resizeImage(file);
-    setForm(f=>({...f, coverImageData:resized}));
+    setForm(f=>({...f, coverImageData:"loading", coverFile:file}));
+    const reader = new FileReader();
+    reader.onload = ev => setForm(f=>({...f, coverImageData:ev.target.result}));
+    reader.readAsDataURL(file);
   }
 
   async function handleAdd(e) {
@@ -190,6 +202,12 @@ export default function App() {
     setSaving(true); setSaveError(null);
 
     const id = Date.now().toString();
+    let coverUrl = null;
+    if (form.coverFile) {
+      try { coverUrl = await uploadCover(form.coverFile, id); }
+      catch(err) { setSaveError("Cover upload failed: " + err.message); setSaving(false); return; }
+    }
+
     const book = {
       id, title:form.title, writer:form.writer, artist:form.artist,
       colorist:form.colorist, publisher:form.publisher, imprint:form.imprint,
@@ -199,8 +217,7 @@ export default function App() {
       moods:     form.moods.split(",").map(s=>s.trim()).filter(Boolean),
       description:form.description,
       coverColor:form.coverColor, coverAccent:form.coverAccent,
-      coverImage: (form.coverImageData && form.coverImageData !== "loading")
-                    ? form.coverImageData : null,
+      coverImage: coverUrl,
       dateAdded: new Date().toISOString().slice(0,10),
     };
 
@@ -219,15 +236,20 @@ export default function App() {
   }
 
   async function handleCoverUpdate(bookId, file) {
-    const resized = await resizeImage(file);
-    const { error } = await supabase
-      .from("books")
-      .update({ cover_image: resized })
-      .eq("id", bookId);
-    if (!error) setBooks(prev => prev.map(b => b.id===bookId ? {...b, coverImage:resized} : b));
+    try {
+      const coverUrl = await uploadCover(file, bookId);
+      const { error } = await supabase
+        .from("books")
+        .update({ cover_image: coverUrl })
+        .eq("id", bookId);
+      if (!error) setBooks(prev => prev.map(b => b.id===bookId ? {...b, coverImage:coverUrl} : b));
+    } catch(err) {
+      console.error("Cover update failed:", err.message);
+    }
   }
 
   async function handleDelete(id) {
+    await supabase.storage.from("covers").remove([`${id}.jpg`]);
     const { error } = await supabase.from("books").delete().eq("id", id);
     if (!error) setBooks(prev => prev.filter(b => b.id !== id));
     setDeleteConfirm(null);
